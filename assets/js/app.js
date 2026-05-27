@@ -354,23 +354,43 @@ function App() {
     },
 
     // ⚡️ Fungsi share baru menggunakan Web Share API
-    shareInvoice() {
+    async shareInvoice() {
       const text = this.invCaption;
-      if (navigator.share) {
-        navigator
-          .share({ text })
-          .then(() => this.popToast("✅ Invoice dibagikan"))
-          .catch((err) => {
-            if (err.name !== "AbortError") {
-              this.popToast("❌ Gagal membagikan");
-            }
+
+      // kalau browser support share file + ada QR
+      if (navigator.share && this.qrImg) {
+        try {
+          // dataurl -> blob
+          const res = await fetch(this.qrImg);
+          const blob = await res.blob();
+
+          const file = new File([blob], `qris-${this.invNo}.png`, {
+            type: "image/png",
           });
-      } else {
-        // Fallback ke clipboard
-        navigator.clipboard
-          .writeText(text)
-          .then(() => this.popToast("📋 Invoice disalin ke clipboard"))
-          .catch(() => this.popToast("❌ Gagal menyalin teks"));
+
+          const shareData = {
+            title: `Invoice ${this.invNo}`,
+            text,
+            files: [file],
+          };
+
+          // cek support file sharing
+          if (navigator.canShare?.(shareData)) {
+            await navigator.share(shareData);
+            this.popToast("✅ Invoice berhasil dibagikan");
+            return;
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      // fallback
+      try {
+        await navigator.clipboard.writeText(text);
+        this.popToast("📋 Invoice disalin ke clipboard");
+      } catch {
+        this.popToast("❌ Gagal membagikan invoice");
       }
     },
 

@@ -1,12 +1,19 @@
 # QRIS Pay
 
-Aplikasi QRIS Generator berbasis PWA (Progressive Web App) menggunakan:
+🚀 Live Demo:
+https://adnanpurnaya.github.io/qris-pay/
+
+Aplikasi QRIS Generator berbasis PWA untuk membuat QRIS dinamis dari QRIS statis.
+
+## Teknologi
 
 - Bootstrap 5
 - Alpine.js
 - QRIS EMV Parser
 - node-qrcode
 - jsQR
+
+---
 
 Mendukung:
 - Generate QRIS dinamis dari QRIS statis

@@ -284,6 +284,337 @@ function App() {
       this.popToast("🔓 PIN dihapus");
     },
 
+    syncMerchantName() {
+      const name = extractMerchantName(this.cfgQris);
+
+      if (name && name.length > 2) {
+        this.cfgName = name;
+      }
+    },
+
+    extractMerchantCity(qris) {
+      try {
+        let i = 0;
+
+        while (i < qris.length) {
+          if (i + 4 > qris.length) break;
+
+          const tag = qris.substring(i, i + 2);
+          const len = parseInt(qris.substring(i + 2, i + 4), 10);
+
+          if (isNaN(len)) break;
+
+          const val = qris.substring(i + 4, i + 4 + len);
+
+          // tag 60 = kota
+          if (tag === "60") return val.trim();
+
+          i += 4 + len;
+        }
+      } catch (e) {}
+
+      return "";
+    },
+
+    async renderInvoiceCanvas() {
+      if (!this.qrImg) return null;
+
+      const loadImage = (src) =>
+        new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.src = src;
+        });
+
+      const formatDate = () =>
+        new Date().toLocaleString("id-ID", {
+          dateStyle: "medium",
+          timeStyle: "short",
+        });
+
+      const city = this.extractMerchantCity(this.qrisStatic);
+      const itemCount = this.invItems?.length || 0;
+
+      // --- Fungsi pembantu untuk sudut membulat ---
+      function roundRect(ctx, x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+      }
+
+      // --- Hitung tinggi minimum yang dibutuhkan ---
+      let y = 740; // posisi awal item setelah header & info
+      const rowHeight = 76;
+      const emptyRowY = y; // simpan untuk fallback
+
+      if (itemCount) {
+        y += itemCount * rowHeight;
+      } else {
+        y += rowHeight; // ruang untuk "Pembayaran Manual"
+      }
+
+      const boxTop = y + 40;
+      const boxHeight = 760; // tinggi blok total + QR
+      const iconGroupBottom = boxTop + 940 + 120; // akhir grup ikon
+      const footerHeight = 130;
+      const minCanvasHeight = iconGroupBottom + footerHeight + 60; // padding bawah
+
+      // Tetapkan tinggi kanvas, minimal 1920 px (agar tidak terlalu pendek)
+      const W = 1080;
+      const H = Math.max(1920, minCanvasHeight);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext("2d");
+
+      // ========= BACKGROUND =========
+      const bg = ctx.createLinearGradient(0, 0, 0, H);
+      bg.addColorStop(0, "#f9f9fb");
+      bg.addColorStop(1, "#e8ecf1");
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, W, H);
+
+      // ========= KARTU UTAMA =========
+      ctx.fillStyle = "#ffffff";
+      ctx.shadowColor = "rgba(0,0,0,0.05)";
+      ctx.shadowBlur = 40;
+      ctx.shadowOffsetY = 12;
+      roundRect(ctx, 40, 40, W - 80, H - 80, 40);
+      ctx.fill();
+      ctx.shadowColor = "transparent";
+
+      // ========= HEADER =========
+      ctx.textAlign = "center";
+
+      // Lingkaran logo
+      const logoGrad = ctx.createLinearGradient(0, 0, 0, 200);
+      logoGrad.addColorStop(0, "#e63946");
+      logoGrad.addColorStop(1, "#b71c1c");
+      ctx.fillStyle = logoGrad;
+      ctx.beginPath();
+      ctx.arc(W / 2, 150, 80, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Lingkaran dalam (stroke)
+      ctx.strokeStyle = "rgba(255,255,255,0.3)";
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.arc(W / 2, 150, 66, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Teks "QRIS"
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 30px 'Segoe UI', sans-serif";
+      ctx.fillText("QRIS", W / 2, 162);
+
+      // Nama merchant
+      ctx.fillStyle = "#0a0a0a";
+      ctx.font = "bold 56px 'Segoe UI', sans-serif";
+      ctx.fillText(this.merchant || "Merchant", W / 2, 310);
+
+      // Alamat
+      ctx.fillStyle = "#6b7280";
+      ctx.font = "26px 'Segoe UI', sans-serif";
+      ctx.fillText(city ? `📍 ${city}` : "📍 Indonesia", W / 2, 360);
+
+      // Garis pembatas
+      ctx.strokeStyle = "#e5e7eb";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(100, 420);
+      ctx.lineTo(W - 100, 420);
+      ctx.stroke();
+
+      // ========= INFO INVOICE =========
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#6b7280";
+      ctx.font = "22px 'Segoe UI', sans-serif";
+      ctx.fillText("No. Invoice", 100, 500);
+      ctx.fillStyle = "#d90429";
+      ctx.font = "bold 28px 'Courier New', monospace";
+      ctx.fillText(this.invNo || "-", 100, 545);
+
+      ctx.fillStyle = "#6b7280";
+      ctx.font = "22px 'Segoe UI', sans-serif";
+      ctx.fillText("Tanggal", 620, 500);
+      ctx.fillStyle = "#1f2937";
+      ctx.font = "26px 'Segoe UI', sans-serif";
+      ctx.fillText(formatDate(), 620, 545);
+
+      // ========= HEADER TABEL =========
+      ctx.fillStyle = "#d90429";
+      roundRect(ctx, 60, 610, W - 120, 64, 16);
+      ctx.fill();
+
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 22px 'Segoe UI', sans-serif";
+      ctx.fillText("ITEM", 90, 650);
+      ctx.fillText("QTY", 710, 650);
+      ctx.fillText("SUBTOTAL", 830, 650);
+
+      // ========= DAFTAR ITEM =========
+      y = 740; // reset ke posisi awal item
+      ctx.font = "28px 'Segoe UI', sans-serif";
+
+      if (itemCount) {
+        this.invItems.forEach((it, idx) => {
+          // Baris item
+          ctx.fillStyle = "#111827";
+          ctx.textAlign = "left";
+          ctx.fillText(`${it.emoji || "🍽️"}  ${it.name}`, 90, y);
+
+          ctx.fillText(String(it.qty), 725, y);
+
+          ctx.textAlign = "right";
+          ctx.fillText(this.rupiah(it.sub), W - 90, y);
+
+          // Garis pemisah antar item
+          ctx.strokeStyle = "#f3f4f6";
+          ctx.beginPath();
+          ctx.moveTo(80, y + 28);
+          ctx.lineTo(W - 80, y + 28);
+          ctx.stroke();
+
+          y += rowHeight;
+        });
+      } else {
+        ctx.fillStyle = "#4b5563";
+        ctx.textAlign = "left";
+        ctx.fillText("Pembayaran Manual", 90, y);
+        y += rowHeight;
+      }
+
+      // ========= BLOK TOTAL + QR =========
+      const boxY = y + 40;
+      const cardGrad = ctx.createLinearGradient(0, boxY, 0, boxY + boxHeight);
+      cardGrad.addColorStop(0, "#ffffff");
+      cardGrad.addColorStop(1, "#f8f9fa");
+      ctx.fillStyle = cardGrad;
+      roundRect(ctx, 60, boxY, W - 120, boxHeight, 32);
+      ctx.fill();
+
+      // Garis vertikal pemisah
+      ctx.strokeStyle = "#e5e7eb";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(W / 2, boxY + 30);
+      ctx.lineTo(W / 2, boxY + 190);
+      ctx.stroke();
+
+      // Total
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#374151";
+      ctx.font = "bold 32px 'Segoe UI', sans-serif";
+      ctx.fillText("TOTAL", 100, boxY + 80);
+      ctx.fillStyle = "#d90429";
+      ctx.font = "bold 68px 'Segoe UI', sans-serif";
+      ctx.fillText(this.rupiah(this.finalAmt), 100, boxY + 160);
+
+      // Metode pembayaran
+      ctx.fillStyle = "#6b7280";
+      ctx.font = "26px 'Segoe UI', sans-serif";
+      ctx.fillText("Metode Pembayaran", 600, boxY + 80);
+      ctx.fillStyle = "#111827";
+      ctx.font = "bold 42px 'Segoe UI', sans-serif";
+      ctx.fillText("QRIS", 600, boxY + 138);
+      ctx.fillStyle = "#4b5563";
+      ctx.font = "20px 'Segoe UI', sans-serif";
+      ctx.fillText("QR Code Standar", 600, boxY + 180);
+      ctx.fillText("Pembayaran Nasional", 600, boxY + 208);
+
+      // Label scan
+      ctx.fillStyle = "#6b7280";
+      ctx.font = "24px 'Segoe UI', sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("Scan QRIS untuk pembayaran", W / 2, boxY + 270);
+
+      // ========= QR CODE =========
+      const qr = await loadImage(this.qrImg);
+      const qrSize = 430;
+      ctx.fillStyle = "#fff";
+      ctx.shadowColor = "rgba(0,0,0,0.1)";
+      ctx.shadowBlur = 24;
+      ctx.shadowOffsetY = 8;
+      roundRect(
+        ctx,
+        (W - qrSize) / 2 - 24,
+        boxY + 310,
+        qrSize + 48,
+        qrSize + 48,
+        24
+      );
+      ctx.fill();
+      ctx.shadowColor = "transparent";
+
+      ctx.drawImage(qr, (W - qrSize) / 2, boxY + 334, qrSize, qrSize);
+
+      // Teks bawah QR
+      ctx.fillStyle = "#0a0a0a";
+      ctx.font = "bold 27px 'Segoe UI', sans-serif";
+      ctx.fillText("SATU QRIS UNTUK SEMUA", W / 2, boxY + 840);
+
+      // ========= LANGKAH PEMBAYARAN =========
+      const iconY = boxY + 940;
+      const icons = [
+        ["📱", "Buka Aplikasi", "E-Wallet / Bank"],
+        ["📋", "Pilih Menu", "QRIS"],
+        ["📷", "Scan QR Code", "di Atas"],
+        ["✅", "Konfirmasi", "Pembayaran"],
+      ];
+
+      icons.forEach((ico, idx) => {
+        const x = 170 + idx * 240;
+        // Lingkaran ikon
+        ctx.fillStyle = "#f3f4f6";
+        ctx.beginPath();
+        ctx.arc(x, iconY, 52, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#d1d5db";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.font = "38px 'Segoe UI', sans-serif";
+        ctx.fillStyle = "#d90429";
+        ctx.textAlign = "center";
+        ctx.fillText(ico[0], x, iconY + 14);
+
+        ctx.font = "bold 19px 'Segoe UI', sans-serif";
+        ctx.fillStyle = "#1f2937";
+        ctx.fillText(ico[1], x, iconY + 92);
+
+        ctx.font = "18px 'Segoe UI', sans-serif";
+        ctx.fillStyle = "#6b7280";
+        ctx.fillText(ico[2], x, iconY + 120);
+      });
+
+      // ========= FOOTER =========
+      const footGrad = ctx.createLinearGradient(0, H - 180, 0, H);
+      footGrad.addColorStop(0, "#e63946");
+      footGrad.addColorStop(1, "#b71c1c");
+      ctx.fillStyle = footGrad;
+      roundRect(ctx, 40, H - 170, W - 80, 130, 0);
+      ctx.fill();
+
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 28px 'Segoe UI', sans-serif";
+      ctx.fillText("Terima kasih telah berbelanja 🙏", W / 2, H - 105);
+      ctx.font = "22px 'Segoe UI', sans-serif";
+      ctx.fillText(
+        "Barang yang sudah dibeli tidak dapat dikembalikan",
+        W / 2,
+        H - 65
+      );
+
+      return canvas.toDataURL("image/png", 1.0);
+    },
+
     async generateQRIS(amount) {
       if (!amount || amount <= 0) return;
       if (!this.qrisStatic) {
@@ -311,6 +642,7 @@ function App() {
           color: { dark: "#000000", light: "#FFFFFF" },
           errorCorrectionLevel: "H",
         });
+        this.clearCart();
         this.history.unshift({
           no: this.invNo,
           amount,
@@ -353,44 +685,39 @@ function App() {
       );
     },
 
-    // ⚡️ Fungsi share baru menggunakan Web Share API
     async shareInvoice() {
-      const text = this.invCaption;
-
-      // kalau browser support share file + ada QR
-      if (navigator.share && this.qrImg) {
-        try {
-          // dataurl -> blob
-          const res = await fetch(this.qrImg);
-          const blob = await res.blob();
-
-          const file = new File([blob], `qris-${this.invNo}.png`, {
-            type: "image/png",
-          });
-
-          const shareData = {
-            title: `Invoice ${this.invNo}`,
-            text,
-            files: [file],
-          };
-
-          // cek support file sharing
-          if (navigator.canShare?.(shareData)) {
-            await navigator.share(shareData);
-            this.popToast("✅ Invoice berhasil dibagikan");
-            return;
-          }
-        } catch (e) {
-          console.error(e);
-        }
-      }
-
-      // fallback
       try {
-        await navigator.clipboard.writeText(text);
-        this.popToast("📋 Invoice disalin ke clipboard");
-      } catch {
-        this.popToast("❌ Gagal membagikan invoice");
+        const rendered = await this.renderInvoiceCanvas();
+
+        const res = await fetch(rendered);
+        const blob = await res.blob();
+
+        const file = new File([blob], `invoice-${this.invNo}.png`, {
+          type: "image/png",
+        });
+
+        const shareData = {
+          title: `Invoice ${this.invNo}`,
+          text: `Invoice pembayaran ${this.rupiah(this.finalAmt)}`,
+          files: [file],
+        };
+
+        if (navigator.share && navigator.canShare?.(shareData)) {
+          await navigator.share(shareData);
+          this.popToast("✅ Invoice berhasil dibagikan");
+          return;
+        }
+
+        // fallback download
+        const a = document.createElement("a");
+        a.href = rendered;
+        a.download = `invoice-${this.invNo}.png`;
+        a.click();
+
+        this.popToast("✅ Invoice berhasil diunduh");
+      } catch (e) {
+        console.error(e);
+        this.popToast("❌ Gagal membuat invoice");
       }
     },
 

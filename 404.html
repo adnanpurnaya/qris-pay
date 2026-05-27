@@ -929,6 +929,7 @@
                 <textarea
                   class="inp mb-2"
                   x-model="cfgQris"
+                  @input="syncMerchantName()"
                   style="min-height: 80px"
                   placeholder="Paste string QRIS statis di sini&#10;Contoh: 00020101021226630014ID.CO.BCA..."
                 ></textarea>

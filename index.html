@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <link rel="manifest" href="manifest.json" />
+
+    <meta name="theme-color" content="#00E5FF" />
+    <meta name="color-scheme" content="dark" />
+
+    <title>QRIS Pay</title>
+
+    <meta
+      name="description"
+      content="Aplikasi QRIS dinamis sederhana untuk generate pembayaran dan invoice."
+    />
+
+    <meta name="application-name" content="QRIS Pay" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <meta name="apple-mobile-web-app-title" content="QRIS Pay" />
+
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="192x192"
+      href="./assets/icon-192.png"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="512x512"
+      href="./assets/icon-512.png"
+    />
+    <link rel="apple-touch-icon" href="./assets/icon-192.png" />
+
+    <link
+      rel="preload"
+      href="./assets/fonts/plus-jakarta-sans-v12-latin-regular.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+
+    <link
+      href="./assets/lib/bootstrap/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="./assets/lib/bootstrap-icons/bootstrap-icons.min.css"
+      rel="stylesheet"
+    />
+    <link href="./assets/css/app.css" rel="stylesheet" />
+    <script src="./assets/lib/node-qrcode/qrcode.min.js"></script>
+    <script src="./assets/lib/jsqr/jsQR.min.js"></script>
+    <script defer src="./assets/lib/alpinejs/alpinejs.min.js"></script>
+  </head>
+
+  <body>
+    <div id="app" x-data="App()">
+      <!-- Toast -->
+      <div
+        class="toast-box"
+        x-show="toast.show"
+        x-text="toast.msg"
+        x-transition:enter="fade-enter-active"
+        x-transition:enter-start="fade-enter"
+        x-transition:enter-end="fade-enter-to"
+        x-transition:leave="fade-leave-active"
+        x-transition:leave-start="fade-leave"
+        x-transition:leave-end="fade-leave-to"
+      ></div>
+
+      <!-- Camera Scanner Modal -->
+      <div
+        class="scanner-modal"
+        x-show="scanner.open"
+        x-transition
+        style="display: none"
+      >
+        <div class="scanner-header">
+          <button
+            class="back-btn"
+            @click="stopScanner()"
+            style="
+              background: rgba(255, 255, 255, 0.15);
+              border: none;
+              color: #fff;
+            "
+          >
+            <i class="bi bi-x-lg"></i>
+          </button>
+          <span style="font-weight: 700; font-size: 15px"
+            >Scan QRIS Statis</span
+          >
+          <div style="width: 38px"></div>
+        </div>
+        <div class="scanner-video-wrap">
+          <video x-ref="scannerVideo" autoplay playsinline></video>
+          <div class="scanner-frame"></div>
+        </div>
+        <div class="scanner-actions">
+          <button
+            class="btn-ghost"
+            @click="stopScanner()"
+            style="color: #fff; border-color: rgba(255, 255, 255, 0.3); flex: 1"
+          >
+            Batal
+          </button>
+          <label class="btn-cyan" style="flex: 1; cursor: pointer">
+            <i class="bi bi-image"></i> Upload Gambar
+            <input
+              type="file"
+              accept="image/*"
+              style="display: none"
+              @change="handleQrisUpload($event)"
+            />
+          </label>
+        </div>
+      </div>
+
+      <!-- PIN Unlock Overlay -->
+      <div
+        class="overlay"
+        x-show="pinLocked"
+        @click.stop
+        style="display: none; z-index: 105"
+      >
+        <div
+          style="
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: 20px;
+            padding: 28px 24px;
+            width: calc(100% - 48px);
+            max-width: 360px;
+            text-align: center;
+          "
+        >
+          <i
+            class="bi bi-shield-lock-fill"
+            style="font-size: 40px; color: var(--cyan)"
+          ></i>
+          <p style="font-weight: 700; font-size: 16px; margin-top: 12px">
+            Masukkan PIN
+          </p>
+          <p style="font-size: 12px; color: var(--text2); margin-bottom: 16px">
+            Pengaturan diproteksi PIN
+          </p>
+          <input
+            type="password"
+            class="inp text-center"
+            x-model="pinInput"
+            maxlength="6"
+            placeholder="••••••"
+            style="font-size: 22px; letter-spacing: 8px; text-align: center"
+            @keydown.enter="unlockPin()"
+          />
+          <div class="d-flex gap-2 mt-3">
+            <button
+              class="btn-ghost flex-1"
+              @click="pinLocked=false;pinInput='';tab='transaksi'"
+            >
+              Batal
+            </button>
+            <button
+              class="btn-cyan flex-1"
+              @click="unlockPin()"
+              :disabled="!pinInput"
+            >
+              Buka
+            </button>
+          </div>
+          <p
+            x-show="pinError"
+            style="color: var(--red); font-size: 12px; margin-top: 8px"
+            x-text="pinError"
+          ></p>
+        </div>
+      </div>
+
+      <!-- ═══════════ MAIN CONTENT ═══════════ -->
+      <div class="main-content" :key="tab">
+        <!-- ── TAB: TRANSAKSI ── -->
+        <template x-if="tab==='transaksi'">
+          <div>
+            <!-- Sub-screen: MANUAL -->
+            <template x-if="subScreen==='manual'">
+              <div>
+                <div class="app-header d-flex align-items-center gap-3">
+                  <button class="back-btn" @click="subScreen=null;manualRaw=''">
+                    <i class="bi bi-arrow-left"></i>
+                  </button>
+                  <div>
+                    <h2 style="font-size: 18px; font-weight: 700; margin: 0">
+                      Input Manual
+                    </h2>
+                    <p style="font-size: 12px; color: var(--text2); margin: 0">
+                      Ketik nominal pembayaran
+                    </p>
+                  </div>
+                </div>
+                <div style="padding: 18px 18px 30px">
+                  <!-- ... (isi manual screen sama) ... -->
+                  <div
+                    class="card-base text-center mb-3 anim"
+                    style="padding: 20px 16px"
+                  >
+                    <p class="lbl mb-2">Nominal</p>
+                    <div class="amount-display" :class="{empty: !manualRaw}">
+                      <span
+                        x-text="manualRaw ? 'Rp\u00a0' + fmtNum(manualRaw) : 'Rp\u00a00'"
+                      ></span>
+                    </div>
+                    <div
+                      style="
+                        width: 40px;
+                        height: 2px;
+                        background: var(--cyan);
+                        opacity: 0.4;
+                        border-radius: 1px;
+                        margin: 8px auto 0;
+                      "
+                    ></div>
+                  </div>
+                  <p class="lbl mb-2 anim d1">Nominal Cepat</p>
+                  <div class="quick-chips mb-3 anim d1">
+                    <template x-for="q in quickAmts" :key="q">
+                      <button
+                        class="chip"
+                        :class="{active: manualRaw===q.toString()}"
+                        @click="manualRaw=q.toString()"
+                      >
+                        <span x-text="shortRupiah(q)"></span>
+                      </button>
+                    </template>
+                  </div>
+                  <div class="numpad mb-4 anim d2">
+                    <template x-for="k in numKeys" :key="k.v">
+                      <button
+                        class="num-key"
+                        :class="{'key-del': k.t==='del','key-000': k.v==='000'}"
+                        @click="numTap(k)"
+                      >
+                        <span x-show="k.t!=='del'" x-text="k.v"></span>
+                        <i
+                          x-show="k.t==='del'"
+                          class="bi bi-backspace-fill"
+                          style="font-size: 17px"
+                        ></i>
+                      </button>
+                    </template>
+                  </div>
+                  <div class="anim d3">
+                    <button
+                      class="btn-cyan mb-2"
+                      @click="generateQRIS(parseInt(manualRaw||'0'))"
+                      :disabled="!manualRaw || parseInt(manualRaw)<=0 || !qrisStatic"
+                    >
+                      <i class="bi bi-qr-code-scan" style="font-size: 18px"></i>
+                      Generate QRIS
+                    </button>
+                    <p
+                      x-show="!qrisStatic"
+                      style="
+                        font-size: 12px;
+                        color: var(--red);
+                        text-align: center;
+                        margin-top: 8px;
+                      "
+                    >
+                      ⚠️ Setup QRIS statis di Pengaturan terlebih dahulu
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <!-- Sub-screen: CART -->
+            <template x-if="subScreen==='cart'">
+              <!-- ... (isi cart screen sama) ... -->
+              <div style="padding-bottom: 160px">
+                <div class="app-header d-flex align-items-center gap-3">
+                  <button class="back-btn" @click="subScreen=null;clearCart()">
+                    <i class="bi bi-arrow-left"></i>
+                  </button>
+                  <div class="flex-grow-1">
+                    <h2 style="font-size: 18px; font-weight: 700; margin: 0">
+                      Pilih Produk
+                    </h2>
+                    <p style="font-size: 12px; color: var(--text2); margin: 0">
+                      Tambahkan ke keranjang
+                    </p>
+                  </div>
+                  <div style="position: relative" x-show="cartCount>0">
+                    <div class="back-btn" style="pointer-events: none">
+                      <i class="bi bi-cart3"></i>
+                    </div>
+                    <span
+                      style="
+                        position: absolute;
+                        top: -5px;
+                        right: -5px;
+                        background: var(--cyan);
+                        color: #000;
+                        font-size: 10px;
+                        font-weight: 700;
+                        border-radius: 10px;
+                        padding: 1px 5px;
+                      "
+                      x-text="cartCount"
+                    ></span>
+                  </div>
+                </div>
+                <div style="padding: 18px">
+                  <div class="product-grid">
+                    <template x-for="p in products" :key="p.id">
+                      <div
+                        class="product-card"
+                        :class="{'has-qty': (cart[p.id]||0)>0}"
+                      >
+                        <span
+                          class="qty-badge"
+                          x-show="(cart[p.id]||0)>0"
+                          x-text="cart[p.id]"
+                        ></span>
+                        <div
+                          style="font-size: 26px; margin-bottom: 6px"
+                          x-text="p.emoji"
+                        ></div>
+                        <p
+                          style="
+                            font-size: 13px;
+                            font-weight: 600;
+                            margin: 0 0 3px;
+                            line-height: 1.3;
+                          "
+                          x-text="p.name"
+                        ></p>
+                        <p
+                          class="text-cyan"
+                          style="
+                            font-size: 12px;
+                            font-family: var(--mono);
+                            font-weight: 500;
+                            margin-bottom: 8px;
+                          "
+                          x-text="rupiah(p.price)"
+                        ></p>
+                        <div x-show="(cart[p.id]||0)===0">
+                          <button class="add-btn w-100" @click="addCart(p.id)">
+                            + Tambah
+                          </button>
+                        </div>
+                        <div class="qty-row" x-show="(cart[p.id]||0)>0">
+                          <button class="qty-btn" @click="delCart(p.id)">
+                            <i class="bi bi-dash"></i>
+                          </button>
+                          <span
+                            style="
+                              flex: 1;
+                              text-align: center;
+                              font-weight: 700;
+                              font-size: 16px;
+                            "
+                            x-text="cart[p.id]||0"
+                          ></span>
+                          <button class="qty-btn plus" @click="addCart(p.id)">
+                            <i class="bi bi-plus"></i>
+                          </button>
+                        </div>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+                <div
+                  class="cart-bar"
+                  x-show="cartCount>0"
+                  x-transition:enter="slide-up-enter-active"
+                  x-transition:enter-start="slide-up-enter"
+                  x-transition:enter-end="slide-up-enter-to"
+                  x-transition:leave="slide-up-leave-active"
+                  x-transition:leave-start="slide-up-leave"
+                  x-transition:leave-end="slide-up-leave-to"
+                  style="display: none"
+                >
+                  <div
+                    class="d-flex justify-content-between align-items-center mb-3"
+                  >
+                    <div>
+                      <p
+                        style="font-size: 12px; color: var(--text2); margin: 0"
+                        x-text="cartCount + ' item dipilih'"
+                      ></p>
+                      <p
+                        class="text-cyan"
+                        style="
+                          font-size: 22px;
+                          font-weight: 800;
+                          font-family: var(--mono);
+                          margin: 0;
+                        "
+                        x-text="rupiah(cartTotal)"
+                      ></p>
+                    </div>
+                    <button
+                      class="btn-ghost"
+                      @click="clearCart()"
+                      style="width: auto; padding: 8px 14px; font-size: 12px"
+                    >
+                      <i class="bi bi-trash3"></i> Reset
+                    </button>
+                  </div>
+                  <button
+                    class="btn-cyan"
+                    @click="generateQRIS(cartTotal)"
+                    :disabled="!qrisStatic"
+                  >
+                    <i class="bi bi-qr-code-scan" style="font-size: 17px"></i>
+                    Generate QRIS — <span x-text="rupiah(cartTotal)"></span>
+                  </button>
+                </div>
+              </div>
+            </template>
+
+            <!-- Sub-screen: RESULT -->
+            <template x-if="subScreen==='result'">
+              <div>
+                <div class="app-header d-flex align-items-center gap-3">
+                  <button class="back-btn" @click="newTxn()">
+                    <i class="bi bi-arrow-left"></i>
+                  </button>
+                  <div>
+                    <h2 style="font-size: 18px; font-weight: 700; margin: 0">
+                      QRIS Siap
+                    </h2>
+                    <p style="font-size: 12px; color: var(--text2); margin: 0">
+                      Tunjukkan ke customer untuk scan
+                    </p>
+                  </div>
+                </div>
+                <div style="padding: 18px 18px 30px">
+                  <div class="result-card mb-4 anim">
+                    <!-- ... result card isi sama ... -->
+                    <div class="result-card-stripe"></div>
+                    <div style="padding: 20px">
+                      <div class="d-flex justify-content-between mb-4">
+                        <div>
+                          <p class="lbl mb-1">No. Invoice</p>
+                          <p
+                            style="
+                              font-size: 12px;
+                              font-weight: 700;
+                              font-family: var(--mono);
+                              margin: 0;
+                            "
+                            x-text="invNo"
+                          ></p>
+                        </div>
+                        <div class="text-end">
+                          <p class="lbl mb-1">Merchant</p>
+                          <p
+                            style="font-size: 12px; font-weight: 600; margin: 0"
+                            x-text="merchant"
+                          ></p>
+                        </div>
+                      </div>
+                      <div class="text-center mb-4">
+                        <p class="lbl mb-1">Total Pembayaran</p>
+                        <h2
+                          class="text-cyan"
+                          style="
+                            font-size: 30px;
+                            font-weight: 800;
+                            font-family: var(--mono);
+                            margin: 0;
+                          "
+                          x-text="rupiah(finalAmt)"
+                        ></h2>
+                      </div>
+                      <div class="d-flex justify-content-center mb-4">
+                        <div class="qr-wrap">
+                          <img :src="qrImg" alt="QRIS" x-show="qrImg" />
+                          <div
+                            x-show="!qrImg"
+                            style="
+                              width: 200px;
+                              height: 200px;
+                              display: flex;
+                              align-items: center;
+                              justify-content: center;
+                              color: var(--text2);
+                            "
+                          >
+                            <span style="font-size: 13px">Membuat QR...</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div x-show="invItems.length>0">
+                        <p class="lbl mb-2">Rincian Pesanan</p>
+                        <template x-for="it in invItems" :key="it.id">
+                          <div class="inv-row">
+                            <span
+                              ><span x-text="it.emoji"></span
+                              ><span class="ms-2" x-text="it.name"></span
+                              ><span
+                                style="color: var(--text2); margin-left: 4px"
+                                x-text="'×' + it.qty"
+                              ></span
+                            ></span>
+                            <span
+                              style="font-family: var(--mono); font-weight: 600"
+                              x-text="rupiah(it.sub)"
+                            ></span>
+                          </div>
+                        </template>
+                      </div>
+                      <p
+                        style="
+                          font-size: 11px;
+                          color: var(--text3);
+                          text-align: center;
+                          margin-top: 12px;
+                        "
+                        x-text="invTime"
+                      ></p>
+                    </div>
+                  </div>
+
+                  <!-- ⚡️ TOMBOL SHARE BARU MENGGUNAKAN WEB SHARE API -->
+                  <div class="d-flex flex-column gap-3 anim d2">
+                    <button class="btn-share" @click="shareInvoice()">
+                      <i class="bi bi-share-fill" style="font-size: 18px"></i>
+                      Bagikan Invoice
+                    </button>
+                    <div class="row g-2">
+                      <div class="col-6">
+                        <button class="btn-ghost" @click="dlQR()">
+                          <i class="bi bi-download"></i> Unduh QR
+                        </button>
+                      </div>
+                      <div class="col-6">
+                        <button class="btn-ghost" @click="newTxn()">
+                          <i class="bi bi-plus-circle"></i> Transaksi Baru
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <!-- Default: HOME TRANSACTION -->
+            <template x-if="!subScreen">
+              <!-- ... (home screen sama) ... -->
+              <div>
+                <div
+                  class="app-header d-flex align-items-center justify-content-between"
+                >
+                  <div>
+                    <p class="lbl mb-0" style="letter-spacing: 2px">QRIS Pay</p>
+                    <h1
+                      style="font-size: 20px; font-weight: 800; margin: 0"
+                      x-text="merchant"
+                    ></h1>
+                  </div>
+                  <div
+                    class="dot-online"
+                    :class="qrisStatic ? 'pulse' : ''"
+                    :style="qrisStatic ? '' : 'background:var(--text3);box-shadow:none'"
+                    :title="qrisStatic ? 'QRIS Aktif' : 'Belum dikonfigurasi'"
+                  ></div>
+                </div>
+                <div style="padding: 18px 18px 80px">
+                  <div
+                    x-show="!qrisStatic"
+                    class="anim"
+                    style="
+                      background: var(--red-dim);
+                      border: 1px solid rgba(255, 77, 109, 0.2);
+                      border-radius: 12px;
+                      padding: 11px 14px;
+                      font-size: 13px;
+                      color: var(--red);
+                      cursor: pointer;
+                      margin-bottom: 16px;
+                    "
+                    @click="tab='pengaturan'"
+                  >
+                    <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                    <strong>QRIS belum dikonfigurasi.</strong> Tap untuk setup →
+                  </div>
+                  <div class="card-hero p-4 mb-4 anim">
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                      <span
+                        style="font-size: 12px; color: var(--text2)"
+                        x-text="qrisStatic ? 'QRIS Aktif • Siap transaksi' : 'Belum dikonfigurasi'"
+                      ></span>
+                    </div>
+                    <p
+                      style="
+                        font-size: 12px;
+                        color: var(--text2);
+                        margin: 0 0 2px;
+                      "
+                    >
+                      Total Hari Ini
+                    </p>
+                    <h2
+                      class="text-cyan"
+                      style="
+                        font-size: 30px;
+                        font-weight: 800;
+                        font-family: var(--mono);
+                        margin: 0 0 2px;
+                      "
+                      x-text="rupiah(todayTotal)"
+                    ></h2>
+                    <p
+                      style="font-size: 12px; color: var(--text3); margin: 0"
+                      x-text="todayCount + ' transaksi'"
+                    ></p>
+                  </div>
+                  <p class="lbl mb-3 anim d1">Buat Tagihan Baru</p>
+                  <div class="row g-2 mb-4 anim d2">
+                    <div class="col-6">
+                      <div class="mode-card h-100" @click="subScreen='manual'">
+                        <div
+                          class="mode-icon"
+                          style="background: var(--cyan-dim)"
+                        >
+                          ✏️
+                        </div>
+                        <p
+                          style="
+                            font-size: 14px;
+                            font-weight: 700;
+                            margin: 0 0 4px;
+                          "
+                        >
+                          Input Manual
+                        </p>
+                        <p
+                          style="
+                            font-size: 12px;
+                            color: var(--text2);
+                            margin: 0;
+                          "
+                        >
+                          Ketik nominal langsung
+                        </p>
+                      </div>
+                    </div>
+                    <div class="col-6">
+                      <div class="mode-card h-100" @click="subScreen='cart'">
+                        <div
+                          class="mode-icon"
+                          style="background: var(--indigo-dim)"
+                        >
+                          🛒
+                        </div>
+                        <p
+                          style="
+                            font-size: 14px;
+                            font-weight: 700;
+                            margin: 0 0 4px;
+                          "
+                        >
+                          Dari Keranjang
+                        </p>
+                        <p
+                          style="
+                            font-size: 12px;
+                            color: var(--text2);
+                            margin: 0;
+                          "
+                        >
+                          Pilih produk dulu
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div x-show="history.length>0" class="anim d3">
+                    <p class="lbl mb-3">Transaksi Terakhir</p>
+                    <div class="card-base" style="overflow: hidden">
+                      <template x-for="(h,i) in history.slice(0,5)" :key="i">
+                        <div
+                          class="hist-row"
+                          @click="subScreen='result';invNo=h.no;finalAmt=h.amount;invTime=h.time;qrImg=null;invItems=[]"
+                          style="cursor: pointer"
+                        >
+                          <div>
+                            <p
+                              style="
+                                font-size: 12px;
+                                font-weight: 700;
+                                margin: 0;
+                                font-family: var(--mono);
+                              "
+                              x-text="h.no"
+                            ></p>
+                            <p
+                              style="
+                                font-size: 11px;
+                                color: var(--text2);
+                                margin: 0;
+                              "
+                              x-text="h.time"
+                            ></p>
+                          </div>
+                          <span
+                            class="text-green"
+                            style="
+                              font-family: var(--mono);
+                              font-size: 14px;
+                              font-weight: 600;
+                            "
+                            x-text="rupiah(h.amount)"
+                          ></span>
+                        </div>
+                      </template>
+                    </div>
+                    <button
+                      class="btn-ghost mt-3"
+                      @click="tab='histori'"
+                      x-show="history.length>5"
+                    >
+                      <i class="bi bi-clock-history"></i> Lihat Semua Riwayat
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <!-- ── TAB: HISTORI ── -->
+        <template x-if="tab==='histori'">
+          <!-- ... (histori screen sama) ... -->
+          <div>
+            <div class="app-header">
+              <h2 style="font-size: 18px; font-weight: 700; margin: 0">
+                📋 Riwayat Transaksi
+              </h2>
+            </div>
+            <div style="padding: 18px 18px 80px">
+              <div class="row g-2 mb-3 anim">
+                <div class="col-4">
+                  <div class="card-base text-center p-3">
+                    <p style="font-size: 10px; color: var(--text2); margin: 0">
+                      Hari Ini
+                    </p>
+                    <p
+                      class="text-cyan"
+                      style="
+                        font-size: 16px;
+                        font-weight: 800;
+                        font-family: var(--mono);
+                        margin: 2px 0;
+                      "
+                      x-text="rupiah(histSummary.todayAmt)"
+                    ></p>
+                    <p
+                      style="font-size: 10px; color: var(--text3); margin: 0"
+                      x-text="histSummary.todayCnt+' txn'"
+                    ></p>
+                  </div>
+                </div>
+                <div class="col-4">
+                  <div class="card-base text-center p-3">
+                    <p style="font-size: 10px; color: var(--text2); margin: 0">
+                      Minggu Ini
+                    </p>
+                    <p
+                      style="
+                        font-size: 16px;
+                        font-weight: 800;
+                        font-family: var(--mono);
+                        margin: 2px 0;
+                        color: var(--indigo);
+                      "
+                      x-text="rupiah(histSummary.weekAmt)"
+                    ></p>
+                    <p
+                      style="font-size: 10px; color: var(--text3); margin: 0"
+                      x-text="histSummary.weekCnt+' txn'"
+                    ></p>
+                  </div>
+                </div>
+                <div class="col-4">
+                  <div class="card-base text-center p-3">
+                    <p style="font-size: 10px; color: var(--text2); margin: 0">
+                      Bulan Ini
+                    </p>
+                    <p
+                      class="text-green"
+                      style="
+                        font-size: 16px;
+                        font-weight: 800;
+                        font-family: var(--mono);
+                        margin: 2px 0;
+                      "
+                      x-text="rupiah(histSummary.monthAmt)"
+                    ></p>
+                    <p
+                      style="font-size: 10px; color: var(--text3); margin: 0"
+                      x-text="histSummary.monthCnt+' txn'"
+                    ></p>
+                  </div>
+                </div>
+              </div>
+              <p class="lbl mb-2 anim d1">Filter</p>
+              <div class="quick-chips mb-3 anim d1">
+                <button
+                  class="chip"
+                  :class="{active:histFilter==='all'}"
+                  @click="histFilter='all'"
+                >
+                  Semua
+                </button>
+                <button
+                  class="chip"
+                  :class="{active:histFilter==='today'}"
+                  @click="histFilter='today'"
+                >
+                  Hari Ini
+                </button>
+                <button
+                  class="chip"
+                  :class="{active:histFilter==='week'}"
+                  @click="histFilter='week'"
+                >
+                  Minggu Ini
+                </button>
+                <button
+                  class="chip"
+                  :class="{active:histFilter==='month'}"
+                  @click="histFilter='month'"
+                >
+                  Bulan Ini
+                </button>
+              </div>
+              <div class="anim d2">
+                <p
+                  class="lbl mb-2"
+                  x-text="filteredHistory.length + ' transaksi'"
+                ></p>
+                <div
+                  class="card-base"
+                  style="overflow: hidden"
+                  x-show="filteredHistory.length>0"
+                >
+                  <template x-for="(h,i) in filteredHistory" :key="i">
+                    <div class="hist-row">
+                      <div>
+                        <p
+                          style="
+                            font-size: 12px;
+                            font-weight: 700;
+                            margin: 0;
+                            font-family: var(--mono);
+                          "
+                          x-text="h.no"
+                        ></p>
+                        <p
+                          style="
+                            font-size: 11px;
+                            color: var(--text2);
+                            margin: 0;
+                          "
+                          x-text="h.time"
+                        ></p>
+                      </div>
+                      <span
+                        class="text-green"
+                        style="
+                          font-family: var(--mono);
+                          font-size: 14px;
+                          font-weight: 600;
+                        "
+                        x-text="rupiah(h.amount)"
+                      ></span>
+                    </div>
+                  </template>
+                </div>
+                <div
+                  x-show="filteredHistory.length===0"
+                  style="
+                    text-align: center;
+                    padding: 40px 20px;
+                    color: var(--text3);
+                  "
+                >
+                  <i class="bi bi-inbox" style="font-size: 40px"></i>
+                  <p style="margin-top: 12px; font-size: 13px">
+                    Belum ada transaksi
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ── TAB: PENGATURAN ── -->
+        <template x-if="tab==='pengaturan'">
+          <!-- ... (pengaturan screen sama) ... -->
+          <div>
+            <div class="app-header">
+              <h2 style="font-size: 18px; font-weight: 700; margin: 0">
+                ⚙️ Pengaturan
+              </h2>
+            </div>
+            <div style="padding: 18px 18px 80px">
+              <div class="card-base p-3 mb-3 anim">
+                <p class="lbl mb-3">
+                  <i class="bi bi-qr-code me-1"></i> QRIS Statis
+                </p>
+                <textarea
+                  class="inp mb-2"
+                  x-model="cfgQris"
+                  style="min-height: 80px"
+                  placeholder="Paste string QRIS statis di sini&#10;Contoh: 00020101021226630014ID.CO.BCA..."
+                ></textarea>
+                <div class="d-flex gap-2">
+                  <button class="btn-ghost flex-1" @click="openScanner()">
+                    <i class="bi bi-camera-fill"></i> Scan Kamera
+                  </button>
+                  <label
+                    class="btn-ghost flex-1"
+                    style="cursor: pointer; text-align: center"
+                  >
+                    <i class="bi bi-image"></i> Upload Gambar
+                    <input
+                      type="file"
+                      accept="image/*"
+                      style="display: none"
+                      @change="handleQrisUpload($event)"
+                    />
+                  </label>
+                </div>
+                <p
+                  style="
+                    font-size: 10px;
+                    color: var(--text3);
+                    margin-top: 8px;
+                    line-height: 1.4;
+                  "
+                >
+                  <i class="bi bi-info-circle"></i> String QRIS diawali
+                  <code style="color: var(--cyan)">000201</code>. Nama merchant
+                  akan otomatis terisi.
+                </p>
+              </div>
+              <div class="card-base p-3 mb-3 anim d1">
+                <p class="lbl mb-3">
+                  <i class="bi bi-shop me-1"></i> Info Merchant
+                </p>
+                <label class="lbl d-block mb-1" style="letter-spacing: 0"
+                  >Nama Merchant / Toko</label
+                >
+                <input
+                  type="text"
+                  class="inp"
+                  x-model="cfgName"
+                  placeholder="Nama toko Anda"
+                />
+                <p
+                  style="font-size: 10px; color: var(--text3); margin-top: 4px"
+                >
+                  Auto-terisi dari QRIS. Default: "Toko Saya"
+                </p>
+              </div>
+              <div class="card-base p-3 mb-3 anim d2">
+                <p class="lbl mb-3">
+                  <i class="bi bi-box-seam me-1"></i> Kelola Produk
+                </p>
+                <textarea
+                  class="inp"
+                  x-model="cfgProductsJson"
+                  style="min-height: 140px"
+                  placeholder='[{"id":1,"name":"Produk A","price":15000,"emoji":"📦"}]'
+                ></textarea>
+                <p
+                  style="font-size: 10px; color: var(--text3); margin-top: 4px"
+                >
+                  Format JSON. Gunakan editor yang valid.
+                </p>
+              </div>
+              <div class="card-base p-3 mb-3 anim d3">
+                <p class="lbl mb-3">
+                  <i class="bi bi-shield-check me-1"></i> Keamanan & Akun
+                </p>
+                <div x-show="!savedPin">
+                  <p
+                    style="
+                      font-size: 12px;
+                      color: var(--text2);
+                      margin-bottom: 8px;
+                    "
+                  >
+                    Proteksi pengaturan dengan PIN (opsional):
+                  </p>
+                  <div class="d-flex gap-2">
+                    <input
+                      type="password"
+                      class="inp"
+                      x-model="cfgNewPin"
+                      maxlength="6"
+                      placeholder="PIN 4-6 digit"
+                      style="flex: 1"
+                    />
+                    <button
+                      class="btn-cyan"
+                      @click="setPin()"
+                      :disabled="!cfgNewPin || cfgNewPin.length<4"
+                      style="width: auto; padding: 11px 18px"
+                    >
+                      <i class="bi bi-lock-fill"></i> Set PIN
+                    </button>
+                  </div>
+                </div>
+                <div x-show="savedPin">
+                  <p
+                    style="
+                      font-size: 12px;
+                      color: var(--green);
+                      margin-bottom: 4px;
+                    "
+                  >
+                    <i class="bi bi-shield-check-fill"></i> Pengaturan
+                    diproteksi PIN
+                  </p>
+                  <div class="d-flex gap-2">
+                    <button class="btn-ghost flex-1" @click="removePin()">
+                      <i class="bi bi-unlock-fill"></i> Hapus PIN
+                    </button>
+                  </div>
+                </div>
+                <div class="divider my-3"></div>
+                <button class="btn-outline-red w-100" @click="logout()">
+                  <i class="bi bi-box-arrow-right"></i> Logout / Reset Semua
+                  Data
+                </button>
+                <p
+                  style="font-size: 10px; color: var(--text3); margin-top: 4px"
+                >
+                  Menghapus semua data termasuk QRIS, produk, PIN, dan riwayat
+                  transaksi.
+                </p>
+              </div>
+              <button class="btn-cyan anim d4" @click="saveAllSettings()">
+                <i class="bi bi-check-lg"></i> Simpan Semua Pengaturan
+              </button>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- ═══════════ BOTTOM NAV ═══════════ -->
+      <nav class="bottom-nav">
+        <button
+          class="nav-item"
+          :class="{active: tab==='transaksi'}"
+          @click="switchTab('transaksi')"
+        >
+          <i class="bi bi-qr-code-scan"></i>
+          <span>Transaksi</span>
+        </button>
+        <button
+          class="nav-item"
+          :class="{active: tab==='histori'}"
+          @click="switchTab('histori')"
+          style="position: relative"
+        >
+          <i class="bi bi-clock-history"></i>
+          <span>Histori</span>
+          <span
+            class="nav-badge"
+            x-show="history.length>0"
+            x-text="history.length > 99 ? '99+' : history.length"
+          ></span>
+        </button>
+        <button
+          class="nav-item"
+          :class="{active: tab==='pengaturan'}"
+          @click="switchTab('pengaturan')"
+        >
+          <i class="bi bi-gear-fill"></i>
+          <span>Pengaturan</span>
+        </button>
+      </nav>
+    </div>
+
+    <script src="./assets/js/app.js"></script>
+    <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker
+            .register("./service-worker.js")
+            .then(() => console.log("SW registered"))
+            .catch((err) => console.error(err));
+        });
+      }
+    </script>
+  </body>
+</html>

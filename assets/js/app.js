@@ -306,10 +306,10 @@ function App() {
         });
         this.invItems = [...this.cartLines];
         this.qrImg = await QRCode.toDataURL(modified, {
-          width: 240,
+          width: 1024,
           margin: 2,
           color: { dark: "#000000", light: "#FFFFFF" },
-          errorCorrectionLevel: "M",
+          errorCorrectionLevel: "H",
         });
         this.history.unshift({
           no: this.invNo,

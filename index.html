@@ -198,19 +198,6 @@
             <!-- Sub-screen: MANUAL -->
             <template x-if="subScreen==='manual'">
               <div>
-                <div class="app-header d-flex align-items-center gap-3">
-                  <button class="back-btn" @click="subScreen=null;manualRaw=''">
-                    <i class="bi bi-arrow-left"></i>
-                  </button>
-                  <div>
-                    <h2 style="font-size: 18px; font-weight: 700; margin: 0">
-                      Input Manual
-                    </h2>
-                    <p style="font-size: 12px; color: var(--text2); margin: 0">
-                      Ketik nominal pembayaran
-                    </p>
-                  </div>
-                </div>
                 <div style="padding: 18px 18px 30px">
                   <!-- ... (isi manual screen sama) ... -->
                   <div
@@ -292,9 +279,6 @@
               <!-- ... (isi cart screen sama) ... -->
               <div style="padding-bottom: 160px">
                 <div class="app-header d-flex align-items-center gap-3">
-                  <button class="back-btn" @click="subScreen=null;clearCart()">
-                    <i class="bi bi-arrow-left"></i>
-                  </button>
                   <div class="flex-grow-1">
                     <h2 style="font-size: 18px; font-weight: 700; margin: 0">
                       Pilih Produk
@@ -437,19 +421,6 @@
             <!-- Sub-screen: RESULT -->
             <template x-if="subScreen==='result'">
               <div>
-                <div class="app-header d-flex align-items-center gap-3">
-                  <button class="back-btn" @click="newTxn()">
-                    <i class="bi bi-arrow-left"></i>
-                  </button>
-                  <div>
-                    <h2 style="font-size: 18px; font-weight: 700; margin: 0">
-                      QRIS Siap
-                    </h2>
-                    <p style="font-size: 12px; color: var(--text2); margin: 0">
-                      Tunjukkan ke customer untuk scan
-                    </p>
-                  </div>
-                </div>
                 <div style="padding: 18px 18px 30px">
                   <div class="result-card mb-4 anim">
                     <!-- ... result card isi sama ... -->

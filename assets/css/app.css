@@ -246,7 +246,7 @@ body {
 }
 .amount-display {
   font-family: var(--mono);
-  font-size: clamp(28px, 8vw, 38px);
+  font-size: clamp(24px, 8vw, 35px);
   font-weight: 500;
   color: var(--text);
   text-align: center;
@@ -259,7 +259,7 @@ body {
 }
 .amount-display.empty {
   color: var(--text3);
-  font-size: 24px;
+  font-size: clamp(24px, 8vw, 35px);
 }
 .product-grid {
   display: grid;
